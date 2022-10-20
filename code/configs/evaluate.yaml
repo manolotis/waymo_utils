@@ -1,0 +1,9 @@
+data_config:
+  dataset_config:
+    data_path: "/home/manolotis/sandbox/robustness_benchmark/multipathPP/predictions/"
+  dataloader_config:
+    num_workers: 8
+output_config:
+  out_path: "/home/manolotis/sandbox/robustness_benchmark/multipathPP/evaluations/"
+model:
+  name: "final_RoP_Cov_Single_lr4e-4__65c803f"
