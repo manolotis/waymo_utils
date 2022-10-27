@@ -1,5 +1,6 @@
 import numpy as np
 
+
 def validate_agent_type(agent_type):
     acceptable_types = [str, int, float]
     for t in acceptable_types:
@@ -54,3 +55,14 @@ def type_to_str(agent_type):
     else:
         print(agent_type)
         raise TypeError(f"Type: {type(agent_type)}")
+
+
+def print_data_keys(data, end_execution=True):
+    for k in data.keys():
+        try:
+            print(k, data[k].shape)
+        except:
+            print("Key did not have .shape: ", k, type(data[k]))
+
+    if end_execution:
+        exit()
