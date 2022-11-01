@@ -6,8 +6,8 @@ from torch.utils.data import Dataset, DataLoader
 
 class PredictionsDataset(Dataset):
 
-    def __init__(self, config):
-        self._data_path = os.path.join(config["data_config"]["dataset_config"]["data_path"], config["model"]["name"])
+    def __init__(self, config, model):
+        self._data_path = os.path.join(config["data_config"]["dataset_config"]["data_path"], model["name"])
 
         self._config = config
         files = os.listdir(self._data_path)
@@ -49,8 +49,8 @@ class PredictionsDataset(Dataset):
         return result_dict
 
 
-def get_predictions_dataloader(config):
-    dataset = PredictionsDataset(config)
+def get_predictions_dataloader(config, model):
+    dataset = PredictionsDataset(config, model)
     dataloader = DataLoader(
         dataset, collate_fn=PredictionsDataset.collate_fn, **config["data_config"]["dataloader_config"])
     return dataloader

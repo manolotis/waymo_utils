@@ -27,9 +27,6 @@ def get_config(args):
 
     # If provided in command line, override defaults
 
-    if args.model_name is not None:
-        config["model"]["name"] = args.model_name
-
     if args.n_jobs is not None:
         config["data_config"]["dataloader_config"]["num_workers"] = args.n_jobs
 
