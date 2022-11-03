@@ -86,7 +86,7 @@ def averaged_minADE(predictions_dataloader):
         else:
             result[agent_type]["minADE"] = result[agent_type]["minADE"] + prediction_minADE
         result[agent_type]["count"] += 1
-        result[agent_type]["valid"] += prediction["target/future/valid"]
+        result[agent_type]["valid"] += prediction["target/future/valid"].flatten()
 
         # Add to "all"
         if result["all"]["minADE"] is None:
@@ -94,7 +94,7 @@ def averaged_minADE(predictions_dataloader):
         else:
             result["all"]["minADE"] = result["all"]["minADE"] + prediction_minADE
         result["all"]["count"] += 1
-        result["all"]["valid"] += prediction["target/future/valid"]
+        result["all"]["valid"] += prediction["target/future/valid"].flatten()
 
     for agent_type in result.keys():
         result[agent_type]["minADE"] /= result[agent_type]["count"]
