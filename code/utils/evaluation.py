@@ -60,15 +60,16 @@ def minADEtopK(prediction, K=1):
     return _compute_minADEs(coordinates, probabilities, gt, gt_valid)
 
 
-def _init_metric_result(name):
-    road_users = ["pedestrian", "vehicle", "cyclist"]
+def _init_metric_result(metric_name):
+    road_users = ["pedestrian", "vehicle", "cyclist", "all"]
 
     metric = {}
 
     for user in road_users:
         metric[user] = {
-            name: None,
-            "count": 0
+            metric_name: None,
+            "count": 0,
+            "valid": np.zeros((80,))
         }
 
     return metric
@@ -78,12 +79,22 @@ def averaged_minADE(predictions_dataloader):
     result = _init_metric_result("minADE")
     for prediction in tqdm(predictions_dataloader):
         agent_type = misc.type_to_str(prediction["agent_type"])
+        prediction_minADE = minADE(prediction)
 
         if result[agent_type]["minADE"] is None:
-            result[agent_type]["minADE"] = minADE(prediction)
+            result[agent_type]["minADE"] = prediction_minADE
         else:
-            result[agent_type]["minADE"] = result[agent_type]["minADE"] + minADE(prediction)
+            result[agent_type]["minADE"] = result[agent_type]["minADE"] + prediction_minADE
         result[agent_type]["count"] += 1
+        result[agent_type]["valid"] += prediction["target/future/valid"]
+
+        # Add to "all"
+        if result["all"]["minADE"] is None:
+            result["all"]["minADE"] = prediction_minADE
+        else:
+            result["all"]["minADE"] = result["all"]["minADE"] + prediction_minADE
+        result["all"]["count"] += 1
+        result["all"]["valid"] += prediction["target/future/valid"]
 
     for agent_type in result.keys():
         result[agent_type]["minADE"] /= result[agent_type]["count"]
