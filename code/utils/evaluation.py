@@ -102,6 +102,48 @@ def averaged_minADE(predictions_dataloader):
     return result
 
 
+def _get_prediction(root, prediction_data):
+    result = {}
+    for key in prediction_data.keys():
+        if root not in key:
+            continue
+        result[key.replace(root, "")] = prediction_data[key]
+    return result
+
+
+def per_example_minADE(predictions_dataloader):  # Note: for now only at T=8s
+    result = _init_metric_result("minADE")
+
+    for prediction in tqdm(predictions_dataloader):
+
+        pred = _get_prediction("model/", prediction)
+        pred_base = _get_prediction("base/", prediction)
+        agent_type = misc.type_to_str(pred["agent_type"])
+
+        prediction_minADE = minADE(pred)
+        prediction_base_minADE = minADE(pred_base)
+
+        if result[agent_type]["minADE"] is None:
+            result[agent_type]["minADE"] = []
+        else:
+            result[agent_type]["minADE"].append([prediction_minADE, prediction_base_minADE])
+        result[agent_type]["count"] += 1
+        result[agent_type]["valid"] += pred["target/future/valid"].flatten()
+
+        # Add to "all"
+        if result["all"]["minADE"] is None:
+            result["all"]["minADE"] = []
+        else:
+            result["all"]["minADE"].append([prediction_minADE, prediction_base_minADE])
+        result["all"]["count"] += 1
+        result["all"]["valid"] += pred["target/future/valid"].flatten()
+
+    for agent_type in result.keys():
+        result[agent_type]["minADE"] = np.array(result[agent_type]["minADE"])
+
+    return result
+
+
 def _compute_minADEs(coordinates, probabilities, gt, gt_valid):
     # ToDo: Make more efficient
     n_predictions, timesteps, _ = coordinates.shape
