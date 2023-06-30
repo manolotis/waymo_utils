@@ -69,7 +69,10 @@ def _init_metric_result(metric_name):
         metric[user] = {
             metric_name: None,
             "count": 0,
-            "valid": np.zeros((80,))
+            "valid": np.zeros((80,)),
+            "agent_id": [],
+            "agent_type": [],
+            "scenario_id": [],
         }
 
     return metric
@@ -111,7 +114,7 @@ def _get_prediction(root, prediction_data):
     return result
 
 
-def per_example_minADE(predictions_dataloader):  # Note: for now only at T=8s
+def per_example_minADE(predictions_dataloader):
     result = _init_metric_result("minADE")
 
     for prediction in tqdm(predictions_dataloader):
@@ -125,16 +128,22 @@ def per_example_minADE(predictions_dataloader):  # Note: for now only at T=8s
 
         if result[agent_type]["minADE"] is None:
             result[agent_type]["minADE"] = []
-        else:
-            result[agent_type]["minADE"].append([prediction_minADE, prediction_base_minADE])
+
+        result[agent_type]["minADE"].append([prediction_minADE, prediction_base_minADE])
+        result[agent_type]["agent_type"].append(pred["agent_type"])
+        result[agent_type]["scenario_id"].append(pred["scenario_id"])
+        result[agent_type]["agent_id"].append(pred["agent_id"])
         result[agent_type]["count"] += 1
         result[agent_type]["valid"] += pred["target/future/valid"].flatten()
 
         # Add to "all"
         if result["all"]["minADE"] is None:
             result["all"]["minADE"] = []
-        else:
-            result["all"]["minADE"].append([prediction_minADE, prediction_base_minADE])
+
+        result["all"]["minADE"].append([prediction_minADE, prediction_base_minADE])
+        result["all"]["agent_type"].append(pred["agent_type"])
+        result["all"]["scenario_id"].append(pred["scenario_id"])
+        result["all"]["agent_id"].append(pred["agent_id"])
         result["all"]["count"] += 1
         result["all"]["valid"] += pred["target/future/valid"].flatten()
 
