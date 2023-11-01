@@ -6,6 +6,7 @@ from yaml import Loader
 import numpy as np
 from tqdm import tqdm
 from waymo_utils.code.utils import misc
+# from scenario_mining.utils.parameters.scenario_categories import scenario_catalog
 
 
 def parse_arguments():
@@ -103,6 +104,65 @@ def averaged_minADE(predictions_dataloader):
         result[agent_type]["minADE"] /= result[agent_type]["count"]
 
     return result
+
+
+# ToDo: refactor and expand to other metrics and do not hardcode SCs
+
+def _add_error_to_results(results, results_key, prediction):
+    agent_type = misc.type_to_str(prediction["agent_type"])
+    prediction_minADE = minADE(prediction)
+
+    if results[results_key][agent_type]["minADE"] is None:
+        results[results_key][agent_type]["minADE"] = prediction_minADE
+    else:
+        results[results_key][agent_type]["minADE"] = results[results_key][agent_type]["minADE"] + prediction_minADE
+    results[results_key][agent_type]["count"] += 1
+    results[results_key][agent_type]["valid"] += prediction["target/future/valid"].flatten()
+
+    # Add to "all"
+    if results[results_key]["all"]["minADE"] is None:
+        results[results_key]["all"]["minADE"] = prediction_minADE
+    else:
+        results[results_key]["all"]["minADE"] = results[results_key]["all"]["minADE"] + prediction_minADE
+    results[results_key]["all"]["count"] += 1
+    results[results_key]["all"]["valid"] += prediction["target/future/valid"].flatten()
+
+def _should_add_to_results(scenario_index, scene_id, agent_id, sc):
+    return scene_id in scenario_index and agent_id in scenario_index[scene_id] and sc in scenario_index[scene_id][agent_id]
+
+def averaged_minADE_per_SC(predictions_dataloader, scenario_index):
+    results = {
+        "overall": _init_metric_result("minADE"),
+        "SC1": _init_metric_result("minADE"),
+        "SC7": _init_metric_result("minADE"),
+        "SC13": _init_metric_result("minADE"),
+    }
+
+    #####
+
+    # results_key = "overall"
+    for prediction in tqdm(predictions_dataloader):
+        scene_id = prediction['scenario_id']
+        agent_id = prediction['agent_id']
+        if isinstance(scene_id, list):
+            scene_id = scene_id[0]
+        if isinstance(agent_id, list):
+            agent_id = str(agent_id[0])
+
+        _add_error_to_results(results, "overall", prediction)
+
+        for sc in ["SC1", "SC7", "SC13"]:
+            if _should_add_to_results(scenario_index, scene_id, agent_id, sc):
+                print("Should add to results: scene_id, agent_id, sc = ", scene_id, agent_id, sc)
+                _add_error_to_results(results, sc, prediction)
+
+    for k in results.keys():
+        for agent_type in results[k].keys():
+            if results[k][agent_type]["minADE"] is None:
+                continue
+            results[k][agent_type]["minADE"] /= results[k][agent_type]["count"]
+
+    return results
 
 
 def _get_prediction(root, prediction_data):

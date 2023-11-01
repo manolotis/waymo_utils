@@ -66,3 +66,11 @@ def print_data_keys(data, end_execution=True):
 
     if end_execution:
         exit()
+
+
+def rotate_points(p, origin=(0, 0), angle=0):
+    R = np.array([[np.cos(angle), -np.sin(angle)],
+                  [np.sin(angle), np.cos(angle)]])
+    o = np.atleast_2d(origin)
+    p = np.atleast_2d(p)
+    return np.squeeze((R @ (p.T - o.T) + o.T).T)
