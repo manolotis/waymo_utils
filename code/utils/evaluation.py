@@ -7,6 +7,7 @@ import numpy as np
 from tqdm import tqdm
 from waymo_utils.code.utils import misc
 # from scenario_mining.utils.parameters.scenario_categories import scenario_catalog
+from abc import ABC
 
 
 def parse_arguments():
@@ -40,25 +41,86 @@ def get_config(args):
     return config
 
 
-def minADE(prediction):
-    # calculate minADE for 1 target prediction
-    n_predictions, _, _ = prediction["coordinates"].shape
-    return minADEtopK(prediction, K=n_predictions)
+class BaseMetric(ABC):
+    @staticmethod
+    def compute(prediction):
+        raise NotImplementedError
 
 
-def minADEtopK(prediction, K=1):
-    # calculate minADE for 1 target prediction considering only the topK most likely trajectories
-    coordinates = prediction["coordinates"]
-    assert len(coordinates.shape) == 3  # (n_predictions, num_timesteps, num_features)
-    n_predictions, timesteps, _ = coordinates.shape
-    if n_predictions != K:
-        raise NotImplementedError("Still didn't implement sorting by probability and choosing topK predictions")
+class minADE(BaseMetric):
+    @staticmethod
+    def compute(prediction):
+        n_predictions, _, _ = prediction["coordinates"].shape
+        return minADE._minADEtopK(prediction, K=n_predictions)
 
-    probabilities = prediction["probabilities"]
-    gt = prediction["target/future/xy"]
-    gt_valid = prediction["target/future/valid"]
+    @staticmethod
+    def _minADEtopK(prediction, K=1):
+        # calculate minADE for K target prediction considering only the topK most likely trajectories
+        coordinates = prediction["coordinates"]
+        assert len(coordinates.shape) == 3  # (n_predictions, num_timesteps, num_features)
+        n_predictions, timesteps, _ = coordinates.shape
+        if n_predictions != K:
+            raise NotImplementedError("Still didn't implement sorting by probability and choosing topK predictions")
 
-    return _compute_minADEs(coordinates, probabilities, gt, gt_valid)
+        probabilities = prediction["probabilities"]
+        gt = prediction["target/future/xy"]
+        gt_valid = prediction["target/future/valid"]
+
+        return minADE._compute_minADEs(coordinates, probabilities, gt, gt_valid)
+
+    @staticmethod
+    def _compute_minADEs(coordinates, probabilities, gt, gt_valid):
+        # ToDo: Make more efficient
+        n_predictions, timesteps, _ = coordinates.shape
+        errors = np.linalg.norm(coordinates - gt, axis=2, keepdims=True)
+        errors = errors * gt_valid  # make invalid timesteps 0
+
+        ADEs = np.zeros_like(errors)
+        minADEs = np.zeros((timesteps,))
+
+        for t in range(timesteps):
+            ADEs[:, t] = errors[:, :t + 1].mean(axis=1)
+            minADEs[t] = ADEs[:, t].min()
+
+        return minADEs.squeeze()
+
+
+class minFDE(BaseMetric):
+    @staticmethod
+    def compute(prediction):
+        n_predictions, _, _ = prediction["coordinates"].shape
+        return minFDE._minFDEtopK(prediction, K=n_predictions)
+
+    @staticmethod
+    def _minFDEtopK(prediction, K=1):
+        # calculate minFDE for K target prediction considering only the topK most likely trajectories
+        coordinates = prediction["coordinates"]
+        assert len(coordinates.shape) == 3  # (n_predictions, num_timesteps, num_features)
+        n_predictions, timesteps, _ = coordinates.shape
+        if n_predictions != K:
+            raise NotImplementedError("Still didn't implement sorting by probability and choosing topK predictions")
+
+        probabilities = prediction["probabilities"]
+        gt = prediction["target/future/xy"]
+        gt_valid = prediction["target/future/valid"]
+
+        return minFDE._compute_minFDEs(coordinates, probabilities, gt, gt_valid)
+
+    @staticmethod
+    def _compute_minFDEs(coordinates, probabilities, gt, gt_valid):
+        # ToDo: Make more efficient
+        n_predictions, timesteps, _ = coordinates.shape
+        errors = np.linalg.norm(coordinates - gt, axis=2, keepdims=True)
+        errors = errors * gt_valid  # make invalid timesteps 0
+
+        FDEs = np.zeros_like(errors)
+        minFDEs = np.zeros((timesteps,))
+
+        for t in range(timesteps):
+            FDEs[:, t] = errors[:, t]
+            minFDEs[t] = FDEs[:, t].min()
+
+        return minFDEs.squeeze()
 
 
 def _init_metric_result(metric_name):
@@ -108,35 +170,40 @@ def averaged_minADE(predictions_dataloader):
 
 # ToDo: refactor and expand to other metrics and do not hardcode SCs
 
-def _add_error_to_results(results, results_key, prediction):
+def _add_error_to_results(results, results_key, prediction, metric):
     agent_type = misc.type_to_str(prediction["agent_type"])
-    prediction_minADE = minADE(prediction)
+    error = metric.compute(prediction)
+    metric_name = metric.__name__
 
-    if results[results_key][agent_type]["minADE"] is None:
-        results[results_key][agent_type]["minADE"] = prediction_minADE
+    if results[results_key][agent_type][metric_name] is None:
+        results[results_key][agent_type][metric_name] = error
     else:
-        results[results_key][agent_type]["minADE"] = results[results_key][agent_type]["minADE"] + prediction_minADE
+        results[results_key][agent_type][metric_name] = results[results_key][agent_type][metric_name] + error
     results[results_key][agent_type]["count"] += 1
     results[results_key][agent_type]["valid"] += prediction["target/future/valid"].flatten()
 
     # Add to "all"
-    if results[results_key]["all"]["minADE"] is None:
-        results[results_key]["all"]["minADE"] = prediction_minADE
+    if results[results_key]["all"][metric_name] is None:
+        results[results_key]["all"][metric_name] = error
     else:
-        results[results_key]["all"]["minADE"] = results[results_key]["all"]["minADE"] + prediction_minADE
+        results[results_key]["all"][metric_name] = results[results_key]["all"][metric_name] + error
     results[results_key]["all"]["count"] += 1
     results[results_key]["all"]["valid"] += prediction["target/future/valid"].flatten()
 
-def _should_add_to_results(scenario_index, scene_id, agent_id, sc):
-    return scene_id in scenario_index and agent_id in scenario_index[scene_id] and sc in scenario_index[scene_id][agent_id]
 
-def averaged_minADE_per_SC(predictions_dataloader, scenario_index):
-    results = {
-        "overall": _init_metric_result("minADE"),
-        "SC1": _init_metric_result("minADE"),
-        "SC7": _init_metric_result("minADE"),
-        "SC13": _init_metric_result("minADE"),
-    }
+def _should_add_to_results(scenario_index, scene_id, agent_id, sc):
+    return scene_id in scenario_index and agent_id in scenario_index[scene_id] and sc in scenario_index[scene_id][
+        agent_id]
+
+
+def evaluation_per_SC(predictions_dataloader, scenario_index, metrics=[minADE, minFDE]):
+    # ToDo: group this better, either by metric and then scenario, or scenario and then metric
+    results = {}
+    for metric in metrics:
+        results[f"{metric.__name__}_overall"] = _init_metric_result(metric.__name__)
+        results[f"{metric.__name__}_SC1"] = _init_metric_result(metric.__name__)
+        results[f"{metric.__name__}_SC7"] = _init_metric_result(metric.__name__)
+        results[f"{metric.__name__}_SC13"] = _init_metric_result(metric.__name__)
 
     #####
 
@@ -149,18 +216,24 @@ def averaged_minADE_per_SC(predictions_dataloader, scenario_index):
         if isinstance(agent_id, list):
             agent_id = str(agent_id[0])
 
-        _add_error_to_results(results, "overall", prediction)
+        for metric in metrics:
+            results_key = f"{metric.__name__}_overall"
+            _add_error_to_results(results, results_key, prediction, metric)
 
-        for sc in ["SC1", "SC7", "SC13"]:
-            if _should_add_to_results(scenario_index, scene_id, agent_id, sc):
-                print("Should add to results: scene_id, agent_id, sc = ", scene_id, agent_id, sc)
-                _add_error_to_results(results, sc, prediction)
+            for sc in ["SC1", "SC7", "SC13"]:
+                if _should_add_to_results(scenario_index, scene_id, agent_id, sc):
+                    # print("Should add to results: scene_id, agent_id, sc = ", scene_id, agent_id, sc)
+                    _add_error_to_results(results, f"{metric.__name__}_{sc}", prediction, metric)
 
-    for k in results.keys():
-        for agent_type in results[k].keys():
-            if results[k][agent_type]["minADE"] is None:
+    for metric in metrics:
+        for k in results.keys():
+            if metric.__name__ not in k:
                 continue
-            results[k][agent_type]["minADE"] /= results[k][agent_type]["count"]
+
+            for agent_type in results[k].keys():
+                if results[k][agent_type][metric.__name__] is None:
+                    continue
+                results[k][agent_type][metric.__name__] /= results[k][agent_type]["count"]
 
     return results
 
@@ -227,14 +300,3 @@ def _compute_minADEs(coordinates, probabilities, gt, gt_valid):
         minADEs[t] = ADEs[:, t].min()
 
     return minADEs.squeeze()
-
-
-def minFDE(prediction):
-    # calculate minFDE for 1 target prediction
-    n_predictions, _, _ = prediction["coordinates"].shape
-    return minFDEtopK(prediction, K=n_predictions)
-
-
-def minFDEtopK(K=1):
-    # calculate minFDE for 1 target prediction considering only the topK most likely trajectories
-    raise NotImplementedError
