@@ -196,14 +196,14 @@ def _should_add_to_results(scenario_index, scene_id, agent_id, sc):
         agent_id]
 
 
-def evaluation_per_SC(predictions_dataloader, scenario_index, metrics=[minADE, minFDE]):
+def evaluation_per_SC(predictions_dataloader, scenario_categories, scenario_index_guest, scenario_index_host, metrics=[minADE, minFDE]):
     # ToDo: group this better, either by metric and then scenario, or scenario and then metric
     results = {}
     for metric in metrics:
         results[f"{metric.__name__}_overall"] = _init_metric_result(metric.__name__)
-        results[f"{metric.__name__}_SC1"] = _init_metric_result(metric.__name__)
-        results[f"{metric.__name__}_SC7"] = _init_metric_result(metric.__name__)
-        results[f"{metric.__name__}_SC13"] = _init_metric_result(metric.__name__)
+
+        for sc in scenario_categories:
+            results[f"{metric.__name__}_{sc}"] = _init_metric_result(metric.__name__)
 
     #####
 
@@ -220,9 +220,8 @@ def evaluation_per_SC(predictions_dataloader, scenario_index, metrics=[minADE, m
             results_key = f"{metric.__name__}_overall"
             _add_error_to_results(results, results_key, prediction, metric)
 
-            for sc in ["SC1", "SC7", "SC13"]:
-                if _should_add_to_results(scenario_index, scene_id, agent_id, sc):
-                    # print("Should add to results: scene_id, agent_id, sc = ", scene_id, agent_id, sc)
+            for sc in scenario_categories:
+                if _should_add_to_results(scenario_index_guest, scene_id, agent_id, sc) or _should_add_to_results(scenario_index_host, scene_id, agent_id, sc):
                     _add_error_to_results(results, f"{metric.__name__}_{sc}", prediction, metric)
 
     for metric in metrics:
